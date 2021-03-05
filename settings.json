@@ -1,0 +1,12 @@
+{
+  "access_key": "",
+  "secret_key": "",
+  "price_rise_rate_list": [0.1, 0.2, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 4],
+  "detection_price_rise_rate_list": [0.1, 0.2, 0.3],
+  "losscut_price_rate": 0.1,
+  "price_check_interval": 5,
+  "symbol": "",
+  "notify": true,
+  "chatwork_api_token": "",
+  "chatwork_room_id": ""
+}
