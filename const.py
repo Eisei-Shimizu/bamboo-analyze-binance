@@ -2,7 +2,7 @@ class Const:
     VERSISON = "bamboo-analyze-v1"
     ALL_PRICE_SAVE_FILE_PATH = "./all_price.json"
     ALL_PRICE_SAVE_INTERVAL = 24 * 60 * 60 #24h
-    DETECTIONED_SAVE_FILE_PATH = "./detectioned/detectioned"
+    DETECTIONED_SYMBOL_SAVE_FILE_PATH = "./detectioned/detectioned"
     AGGREGATE_SAVE_FILE_PATH = "./aggregate/aggregate"
     BLACKLIST_SYMBOL_SAVE_FILE_PATH = "./blacklist.json"
     FILE_TYPE_JSON = ".json"
