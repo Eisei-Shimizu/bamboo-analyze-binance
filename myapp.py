@@ -83,7 +83,7 @@ def write_detectioned_symbol(detectioned_symbol, detection_price_rise_rate):
     finally:
         file.close()
 
-def get_detectioned_symbol_list_from_save_file(detection_price_rise_rate):
+def get_detectioned_symbol_from_save_file(detection_price_rise_rate):
     logging.info("検出済銘柄の価格を外部ファイルから取得")
     detectioned_symbol = []
     file = None
@@ -93,7 +93,7 @@ def get_detectioned_symbol_list_from_save_file(detection_price_rise_rate):
         file = open(file_path)
         detectioned_symbol_data = file.read()
         logging.info(detectioned_symbol_data)
-        detectioned_symbol = json.loads(detectioned_symbol_data)["detectioned_symbol_list"]
+        detectioned_symbol = json.loads(detectioned_symbol_data)["detectioned_symbol"]
     except Exception as e:
         logging.error(e)
     finally:
@@ -104,14 +104,22 @@ def get_detectioned_symbol_list_from_save_file(detection_price_rise_rate):
 
 def add_detectioned_symbol(symbol, price_rise_rate):
     logging.info("検出済リストに追加")
-    detectioned_symbol_list = get_detectioned_symbol_list_from_save_file(price_rise_rate)
-    detectioned_symbol_list.append(symbol)
+    detectioned_symbol_list = []
+    detectioned_symbol = get_detectioned_symbol_from_save_file(price_rise_rate)
+
+    if "list" in get_detectioned_symbol_from_save_file.keys():
+        detectioned_symbol_list = get_detectioned_symbol_from_save_file(price_rise_rate)["list"]
+        detectioned_symbol_list.append(symbol)
+        detectioned_symbol["list"] = detectioned_symbol_list
+    else:
+        detection_symbol["list"] = []
+        detection_symbol["list"].append(symbol)
     
-    write_detectioned_symbol(detectioned_symbol_list)
+    write_detectioned_symbol(detectioned_symbol)
 
 def delete_detectioned_symbol(symbol_name, price_rise_rate):
     logging.info("検出済リストから削除")
-    detectioned_symbol_list = get_detectioned_symbol_list_from_save_file(price_rise_rate)
+    detectioned_symbol_list = get_detectioned_symbol_from_save_file(price_rise_rate)["list"]
     for index, detectioned_symbol_item in enumerate(detectioned_symbol_list):
         if detectioned_symbol_item["symbol"] == symbol_name:
             delete_target = detectioned_symbol_list.pop(index)
@@ -121,16 +129,22 @@ def delete_detectioned_symbol(symbol_name, price_rise_rate):
 def is_detectioned_symbol(symbol_name, price_rise_rate):
     result = False
     
-    detectioned_symbol = get_detectioned_symbol_list_from_save_file(price_rise_rate)
+    detectioned_symbol_list = get_detectioned_symbol_from_save_file(price_rise_rate)["list"]
     
-    if len(detectioned_symbol) == 0:
+    if len(detectioned_symbol_list) == 0:
         return False
     
-    for detectioned_symbol_item in detectioned_symbol:
+    for detectioned_symbol_item in detectioned_symbol_list:
         if detectioned_symbol_item["symbol"] == symbol_name:
             result = True
     
     return result
+
+def update_losscut_count(detection_price_rise_rate):
+    detectioned_symbol = get_detectioned_symbol_from_save_file(price_rise_rate)
+    detection_symbol["losscut_count"] = detection_symbol["losscut_count"] + 1 if "losscut_count" in detection_symbol.keys() else 1
+
+    write_detectioned_symbol(detection_symbol, detection_price_rise_rate)
 
 def get_blacklist_symbol_from_save_file():
     logging.info("ブラックリスト銘柄を外部ファイルから取得")
@@ -274,7 +288,7 @@ while True:
                 # 検出済の場合、上昇率をチェック
                 for detection_price_rise_rate in detection_price_rise_rate_list:
                     detection_symbol = None
-                    detection_symbol_list = get_detectioned_symbol_list_from_save_file(detection_price_rise_rate)
+                    detection_symbol_list = get_detectioned_symbol_from_save_file(detection_price_rise_rate)["list"]
                     for detection_symbol_item in detection_symbol_list:
                         if res_all_price_item["symbol"] == detection_symbol_item["symbol"]:
                             detection_symbol = detection_symbol_item
@@ -292,6 +306,7 @@ while True:
                         if is_losscut:
                             # 検出済銘柄から削除し、損切りカウントを増加
                             delete_detectioned_symbol(detection_symbol["symbol"], detection_price_rise_rate)
+                            update_losscut_count(detection_price_rise_rate)
 
                         else:
                             for price_rise_rate_item in price_rise_rate_list:
