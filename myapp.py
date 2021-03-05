@@ -115,7 +115,7 @@ def add_detectioned_symbol(symbol, price_rise_rate):
         detection_symbol["list"] = []
         detection_symbol["list"].append(symbol)
     
-    write_detectioned_symbol(detectioned_symbol)
+    write_detectioned_symbol(detectioned_symbol, price_rise_rate)
 
 def delete_detectioned_symbol(symbol_name, price_rise_rate):
     logging.info("検出済リストから削除")
@@ -123,15 +123,17 @@ def delete_detectioned_symbol(symbol_name, price_rise_rate):
     for index, detectioned_symbol_item in enumerate(detectioned_symbol_list):
         if detectioned_symbol_item["symbol"] == symbol_name:
             delete_target = detectioned_symbol_list.pop(index)
-            write_detectioned_symbol(detectioned_symbol_list)
+            write_detectioned_symbol(detectioned_symbol_list, price_rise_rate)
             logging.info("検出済リストから削除しました:" + delete_target["symbol"])
 
 def is_detectioned_symbol(symbol_name, price_rise_rate):
     result = False
     
-    detectioned_symbol_list = get_detectioned_symbol_from_save_file(price_rise_rate)["list"]
+    detectioned_symbol = get_detectioned_symbol_from_save_file(price_rise_rate)["list"]
+    if detectioned_symbol == None:
+        return False
     
-    if len(detectioned_symbol_list) == 0:
+    if "list" in detectioned_symbol.keys() or len(detectioned_symbol_list) == 0:
         return False
     
     for detectioned_symbol_item in detectioned_symbol_list:
