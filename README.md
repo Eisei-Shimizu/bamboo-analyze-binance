@@ -9,7 +9,7 @@
 - 以下の URL を参考に pip をインストール
   - 'https://docs.aws.amazon.com/ja_jp/cloud9/latest/user-guide/sample-python.html'
 - `sudo yum update`
-- `sudo pip3 install --upgrade pip setuptools`
+- `pip3 install --upgrade pip setuptools`
 - `pip3 install python-binance --user` を実行
 
 # 各種設定
