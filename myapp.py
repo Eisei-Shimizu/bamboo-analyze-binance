@@ -8,6 +8,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import datetime
 from const import Const
+from aggregate import Aggregate
 import urllib.request
 import urllib.parse
 
@@ -72,7 +73,8 @@ def add_all_price(symbol):
 
 def write_detectioned_symbol(detectioned_symbol, detection_price_rise_rate):
     logging.info("検出済銘柄の価格を外部ファイルに保存")
-    file_path = Const.DETECTIONED_SYMBOL_SAVE_FILE_PATH + "_" + str(detection_price_rise_rate * 100) + base_symbol
+    detection_price_rise_rate_formated = int(detection_price_rise_rate * 100)
+    file_path = Const.DETECTIONED_SYMBOL_SAVE_FILE_PATH + "_" + str(detection_price_rise_rate_formated) + "_" + base_symbol + Const.FILE_TYPE_JSON
 
     try:
         file = open(file_path, 'w')
@@ -85,9 +87,10 @@ def write_detectioned_symbol(detectioned_symbol, detection_price_rise_rate):
 
 def get_detectioned_symbol_from_save_file(detection_price_rise_rate):
     logging.info("検出済銘柄の価格を外部ファイルから取得")
-    detectioned_symbol = []
+    detectioned_symbol = None
     file = None
-    file_path = Const.DETECTIONED_SYMBOL_SAVE_FILE_PATH + "_" + str(detection_price_rise_rate * 100) + base_symbol
+    detection_price_rise_rate_formated = int(detection_price_rise_rate * 100)
+    file_path = Const.DETECTIONED_SYMBOL_SAVE_FILE_PATH + "_" + str(detection_price_rise_rate_formated) + "_" + base_symbol + Const.FILE_TYPE_JSON
 
     try:
         file = open(file_path)
@@ -104,49 +107,50 @@ def get_detectioned_symbol_from_save_file(detection_price_rise_rate):
 
 def add_detectioned_symbol(symbol, price_rise_rate):
     logging.info("検出済リストに追加")
-    detectioned_symbol_list = []
     detectioned_symbol = get_detectioned_symbol_from_save_file(price_rise_rate)
 
-    if "list" in get_detectioned_symbol_from_save_file.keys():
-        detectioned_symbol_list = get_detectioned_symbol_from_save_file(price_rise_rate)["list"]
-        detectioned_symbol_list.append(symbol)
-        detectioned_symbol["list"] = detectioned_symbol_list
-    else:
-        detection_symbol["list"] = []
-        detection_symbol["list"].append(symbol)
+    if detectioned_symbol == None or "list" not in detectioned_symbol.keys():
+        detectioned_symbol = {"list":[], "losscut_count": 0}
+
+    detectioned_symbol["list"].append(symbol)
     
     write_detectioned_symbol(detectioned_symbol, price_rise_rate)
 
 def delete_detectioned_symbol(symbol_name, price_rise_rate):
     logging.info("検出済リストから削除")
-    detectioned_symbol_list = get_detectioned_symbol_from_save_file(price_rise_rate)["list"]
-    for index, detectioned_symbol_item in enumerate(detectioned_symbol_list):
+    detectioned_symbol = get_detectioned_symbol_from_save_file(price_rise_rate)
+    for index, detectioned_symbol_item in enumerate(detectioned_symbol["list"]):
         if detectioned_symbol_item["symbol"] == symbol_name:
-            delete_target = detectioned_symbol_list.pop(index)
-            write_detectioned_symbol(detectioned_symbol_list, price_rise_rate)
+            delete_target = detectioned_symbol["list"].pop(index)
+            write_detectioned_symbol(detectioned_symbol, price_rise_rate)
             logging.info("検出済リストから削除しました:" + delete_target["symbol"])
 
 def is_detectioned_symbol(symbol_name, price_rise_rate):
     result = False
     
-    detectioned_symbol = get_detectioned_symbol_from_save_file(price_rise_rate)["list"]
+    detectioned_symbol = get_detectioned_symbol_from_save_file(price_rise_rate)
     if detectioned_symbol == None:
         return False
     
-    if "list" in detectioned_symbol.keys() or len(detectioned_symbol_list) == 0:
+    if "list" not in detectioned_symbol.keys() or len(detectioned_symbol["list"]) == 0:
         return False
     
-    for detectioned_symbol_item in detectioned_symbol_list:
+    for detectioned_symbol_item in detectioned_symbol["list"]:
         if detectioned_symbol_item["symbol"] == symbol_name:
+            logging.info("すでに検出済")
             result = True
     
     return result
 
 def update_losscut_count(detection_price_rise_rate):
-    detectioned_symbol = get_detectioned_symbol_from_save_file(price_rise_rate)
-    detection_symbol["losscut_count"] = detection_symbol["losscut_count"] + 1 if "losscut_count" in detection_symbol.keys() else 1
+    detectioned_symbol = get_detectioned_symbol_from_save_file(detection_price_rise_rate)
+    
+    if detectioned_symbol == None:
+        return
+    
+    detectioned_symbol["losscut_count"] = detectioned_symbol["losscut_count"] + 1 if "losscut_count" in detectioned_symbol.keys() else 1
 
-    write_detectioned_symbol(detection_symbol, detection_price_rise_rate)
+    write_detectioned_symbol(detectioned_symbol, detection_price_rise_rate)
 
 def get_blacklist_symbol_from_save_file():
     logging.info("ブラックリスト銘柄を外部ファイルから取得")
@@ -180,17 +184,29 @@ def is_blacklist_symbol(symbol_name):
     
     return result
 
+def notify_analyze_result(detection_price_rise_rate_list, price_rise_rate_list):
+    for detection_price_rise_rate_item in detection_price_rise_rate_list:
+        detectioned_symbol = get_detectioned_symbol_from_save_file(detection_price_rise_rate_item)
+        
+        if detectioned_symbol == None:
+            logging.info("検出済銘柄を取得できませんでした")
+            logging.info("レート: " + str(detection_price_rise_rate_item))
+        else:
+            aggregate_result = Aggregate().get_aggregate_result(detectioned_symbol, price_rise_rate_list)
+            title = "bamboo集計 - 検出上昇値幅:" + str(detection_price_rise_rate_item)
+            notify_bamboo(title, aggregate_result)
+
 def get_chatwork_api_messages_url(room_id):
     return Const.CHATWORK_API_BASE_URL + Const.CHATWORK_ENDPOINT_ROOMS_PATH + '/' + str(room_id) + Const.CHATWORK_ENDPOINT_MESSAGES_PATH
     
-def notify_bamboo(bamboo):
+def notify_bamboo(title, bamboo):
     
     headers = {
         "X-ChatWorkToken" : token
     }
 
     param = {
-        'body': '[info][title]bamboo銘柄[/title]' + json.dumps(bamboo) + '[/info]',
+        'body': '[info][title]' + title + '[/title]' + json.dumps(bamboo) + '[/info]',
         'self_unread' : 1
     }
     data = urllib.parse.urlencode(param).encode('utf-8')
@@ -244,6 +260,7 @@ while True:
         save_all_price(base_symbol)
         last_save_time = dt_now
     elif last_save_time.day != dt_now.day and dt_now.hour == "9":
+        notify_analyze_result(detection_price_rise_rate_list, price_rise_rate_list)
         save_all_price(base_symbol)
         last_save_time = dt_now
     
@@ -271,66 +288,80 @@ while True:
                         is_not_saved_symbol = False
 
                         # 上昇率を算出
-                        rise_value = float(res_all_price_item["price"]) - saved_all_price_item["price"]
+                        rise_value = float(res_all_price_item["price"]) - float(saved_all_price_item["price"])
                         logging.info("-----------------------")
                         logging.info("rise_value:" + str(rise_value))
-                        price_rise_rate = rise_value / saved_all_price_item["price"]
+                        price_rise_rate = rise_value / float(saved_all_price_item["price"])
                         logging.info("rise_value / price:" + str(price_rise_rate))
                         logging.info("-----------------------")
 
                         # 検出した場合、上昇率に応じたファイルへ保存
                         for detection_price_rise_rate_item in detection_price_rise_rate_list:
-                            if price_rise_rate >= detection_price_rise_rate_item and not is_detectioned_symbol(res_all_price_item["symbol"].replace(base_symbol, ""), price_rise_rate):
+                            logging.info("検出レート:" + str(detection_price_rise_rate_item))
+                            if price_rise_rate >= detection_price_rise_rate_item and not is_detectioned_symbol(res_all_price_item["symbol"], detection_price_rise_rate_item):
+                                logging.info("検出")
+                                logging.info("上昇率: " + str(price_rise_rate))
+                                logging.info("銘柄: " + res_all_price_item["symbol"])
+                                res_all_price_item["detection_time"] = time.time()
                                 add_detectioned_symbol(res_all_price_item, detection_price_rise_rate_item)
             
                 if is_not_saved_symbol and base_symbol in res_all_price_item["symbol"] and check_ng_word(res_all_price_item["symbol"]):
                     # 新規価格チェック銘柄として追加
+                    logging.info("価格チェック銘柄に追加")
+                    logging.info("銘柄: " + res_all_price_item["symbol"])
                     add_all_price(res_all_price_item)
                 
                 # 検出済の場合、上昇率をチェック
                 for detection_price_rise_rate in detection_price_rise_rate_list:
                     detection_symbol = None
-                    detection_symbol_list = get_detectioned_symbol_from_save_file(detection_price_rise_rate)["list"]
+                    detection_symbol_data = get_detectioned_symbol_from_save_file(detection_price_rise_rate)
+                    detection_symbol_list = detection_symbol_data["list"] if detection_symbol_data != None and "list" in detection_symbol_data.keys() else []
+
                     for detection_symbol_item in detection_symbol_list:
                         if res_all_price_item["symbol"] == detection_symbol_item["symbol"]:
                             detection_symbol = detection_symbol_item
 
                     if detection_symbol != None:
-                        rise_value = float(res_all_price_item["price"]) - detection_symbol["price"]
+                        detection_symbol_price = float(detection_symbol["price"])
+                        rise_value = float(res_all_price_item["price"]) - detection_symbol_price
                         logging.info("-----------------------")
                         logging.info("rise_value:" + str(rise_value))
                         logging.info("detection_price_rise_rate:" + str(detection_price_rise_rate))
-                        price_rise_rate = rise_value / detection_symbol["price"]
+                        price_rise_rate = rise_value / detection_symbol_price
                         logging.info("rise_value / price:" + str(price_rise_rate))
                         logging.info("-----------------------")
 
-                        is_losscut = losscut_price_rate >= price_rise_rate
+                        is_losscut = -losscut_price_rate >= price_rise_rate
                         if is_losscut:
                             # 検出済銘柄から削除し、損切りカウントを増加
+                            logging.info("--損切り--")
+                            logging.info(detection_symbol["symbol"])
                             delete_detectioned_symbol(detection_symbol["symbol"], detection_price_rise_rate)
                             update_losscut_count(detection_price_rise_rate)
 
                         else:
                             for price_rise_rate_item in price_rise_rate_list:
                                 if price_rise_rate >= price_rise_rate_item:
-                                    if len(detection_symbol["price_rise_rate_list"]) == 0:
+                                    if "price_rise_rate_list" not in detection_symbol.keys() or len(detection_symbol["price_rise_rate_list"]) == 0:
                                         # 検出済銘柄の上昇率リストに追加
                                         detection_time = time.time()
-                                        detection_symbol["price_rise_rate_list"].add({"price_rise_rate": price_rise_rate_item, "time": detection_time})
+                                        detection_symbol["price_rise_rate_list"] = []
+                                        detection_symbol["price_rise_rate_list"].append({"price_rise_rate": price_rise_rate_item, "time": detection_time})
                                         delete_detectioned_symbol(detection_symbol["symbol"], detection_price_rise_rate)
                                         add_detectioned_symbol(detection_symbol, detection_price_rise_rate)
 
                                     else:
                                         is_exist_price_rate = False
                                         for detection_price_rise_rate_item in detection_symbol["price_rise_rate_list"]:
-                                            if detection_price_rise_rate_item == price_rise_rate:
+                                            if detection_price_rise_rate_item["price_rise_rate"] == price_rise_rate_item:
                                                 # すでにデータにある
-                                                is_not_found_price_rate = True
+                                                logging.info("上昇率データあり")
+                                                is_exist_price_rate = True
                                         
                                         if not is_exist_price_rate:
                                             # 検出済銘柄の上昇率リストに追加
                                             detection_time = time.time()
-                                            detection_symbol["price_rise_rate_list"].add({"price_rise_rate": price_rise_rate_item, "time": detection_time})
+                                            detection_symbol["price_rise_rate_list"].append({"price_rise_rate": price_rise_rate_item, "time": detection_time})
                                             delete_detectioned_symbol(detection_symbol["symbol"], detection_price_rise_rate)
                                             add_detectioned_symbol(detection_symbol, detection_price_rise_rate)
                                             
